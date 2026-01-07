@@ -73,12 +73,12 @@ def extract_structured_ocr(state: GraphState):
                         "type": "object",
                         "properties": {
                             "text": {"type": "string"},
-                            "left": {"type": "integer"},
-                            "top": {"type": "integer"},
-                            "width": {"type": "integer"},
-                            "height": {"type": "integer"}
+                            "ymin": {"type": "integer", "description": "Normalized top edge (0-1000)"},
+                            "xmin": {"type": "integer", "description": "Normalized left edge (0-1000)"},
+                            "ymax": {"type": "integer", "description": "Normalized bottom edge (0-1000)"},
+                            "xmax": {"type": "integer", "description": "Normalized right edge (0-1000)"}
                         },
-                        "required": ["text", "left", "top", "width", "height"]
+                        "required": ["text", "ymin", "xmin", "ymax", "xmax"]
                     }
                 }
             },
@@ -92,7 +92,7 @@ def extract_structured_ocr(state: GraphState):
             content=[
                 {
                     "type": "text",
-                    "text": f"Extract all text tokens from this invoice image. For each token, provide the text and its bounding box in pixels (left, top, width, height). The image size is {width}x{height} pixels."
+                    "text": "Extract all text tokens from this invoice image. For each token, provide the text and its bounding box in normalized coordinates [ymin, xmin, ymax, xmax] where each value is an integer from 0 to 1000. 0 is the top/left edge and 1000 is the bottom/right edge."
                 },
                 {
                     "type": "image_url",
@@ -102,7 +102,24 @@ def extract_structured_ocr(state: GraphState):
         )
 
         result = structured_llm.invoke([message])
-        ocr_data = result.get("tokens", []) if result else []
+        raw_tokens = result.get("tokens", []) if result else []
+        
+        # Scale normalized coordinates back to pixels
+        ocr_data = []
+        for token in raw_tokens:
+            # Convert normalized [ymin, xmin, ymax, xmax] to pixel [left, top, width, height]
+            left = int((token["xmin"] / 1000) * width)
+            top = int((token["ymin"] / 1000) * height)
+            right = int((token["xmax"] / 1000) * width)
+            bottom = int((token["ymax"] / 1000) * height)
+            
+            ocr_data.append({
+                "text": token["text"],
+                "left": left,
+                "top": top,
+                "width": right - left,
+                "height": bottom - top
+            })
 
         logger.debug(f"OCR Tokens count: {len(ocr_data)}")
         return {"ocr_data": ocr_data}
