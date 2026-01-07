@@ -56,6 +56,7 @@ async def extract_invoice_data(file: UploadFile = File(...)):
                     break
                 yield f"data: {json.dumps(chunk)}\n\n"
             except Exception as e:
+                logger.exception("Error during invoice extraction stream")
                 yield f"data: {json.dumps({'error': str(e)})}\n\n"
                 break
     

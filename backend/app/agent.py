@@ -55,33 +55,37 @@ def extract_structured_ocr(state: GraphState):
     """Extracts structured OCR data from the image using RapidOCR (local, no system dependencies)."""
     logger.info("--- EXTRACTING STRUCTURED OCR DATA (RAPIDOCR) ---")
     
-    image_file = BytesIO(state['image_content'])
-    image = Image.open(image_file).convert('RGB')
-    img_array = np.array(image)
+    try:
+        image_file = BytesIO(state['image_content'])
+        image = Image.open(image_file).convert('RGB')
+        img_array = np.array(image)
 
-    # Run RapidOCR
-    # result is a list of [ [bbox], text, confidence ]
-    result, _ = engine(img_array)
+        # Run RapidOCR
+        # result is a list of [ [bbox], text, confidence ]
+        result, _ = engine(img_array)
 
-    ocr_data = []
-    if result:
-        for bbox, text, conf in result:
-            # bbox is typically [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-            x1 = int(min(pt[0] for pt in bbox))
-            y1 = int(min(pt[1] for pt in bbox))
-            x2 = int(max(pt[0] for pt in bbox))
-            y2 = int(max(pt[1] for pt in bbox))
-            
-            ocr_data.append({
-                "text": text,
-                "left": x1,
-                "top": y1,
-                "width": x2 - x1,
-                "height": y2 - y1
-            })
+        ocr_data = []
+        if result:
+            for bbox, text, conf in result:
+                # bbox is typically [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
+                x1 = int(min(pt[0] for pt in bbox))
+                y1 = int(min(pt[1] for pt in bbox))
+                x2 = int(max(pt[0] for pt in bbox))
+                y2 = int(max(pt[1] for pt in bbox))
+                
+                ocr_data.append({
+                    "text": text,
+                    "left": x1,
+                    "top": y1,
+                    "width": x2 - x1,
+                    "height": y2 - y1
+                })
 
-    logger.debug(f"OCR Data: {ocr_data}")
-    return {"ocr_data": ocr_data}
+        logger.debug(f"OCR Data: {ocr_data}")
+        return {"ocr_data": ocr_data}
+    except Exception:
+        logger.exception("Error during RapidOCR extraction")
+        return {"ocr_data": []}
 
 def decide_aoi(state: GraphState):
     """Identifies the coordinates of key areas of interest."""
@@ -109,7 +113,7 @@ def decide_aoi(state: GraphState):
     try:
         areas = chain.invoke({"ocr_data": ocr_text_with_coords})
     except OutputParserException:
-        logger.warning("Could not parse LLM output for AOI. Returning empty.")
+        logger.exception("Could not parse LLM output for AOI. Returning empty.")
         areas = {}
     return {"areas_of_interest": areas}
 
@@ -143,7 +147,7 @@ def extract_header_data(state: GraphState):
     try:
         header_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
-        logger.warning("Could not parse LLM output for header extraction. Returning None.")
+        logger.exception("Could not parse LLM output for header extraction. Returning None.")
         header_data = None
     return {"extracted_header": header_data}
 
@@ -176,7 +180,7 @@ def extract_line_items_data(state: GraphState):
     try:
         line_items_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
-        logger.warning("Could not parse LLM output for line items extraction. Returning None.")
+        logger.exception("Could not parse LLM output for line items extraction. Returning None.")
         line_items_data = None
     return {"extracted_line_items": line_items_data}
 
@@ -207,7 +211,7 @@ def extract_summary_data(state: GraphState):
     try:
         summary_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
-        logger.warning("Could not parse LLM output for summary extraction. Returning None.")
+        logger.exception("Could not parse LLM output for summary extraction. Returning None.")
         summary_data = None
     return {"extracted_summary": summary_data}
 
