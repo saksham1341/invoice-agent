@@ -4,13 +4,11 @@ import logging
 from typing import TypedDict, Optional, List, Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain_core.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langgraph.graph import StateGraph, END
 from io import BytesIO
 from PIL import Image
 import numpy as np
 from rapidocr_onnxruntime import RapidOCR
-from langchain_core.exceptions import OutputParserException
 from . import config
 from .schema import (
     BoundingBox, WithValue, AreasOfInterest, ExtractedHeader, 
@@ -108,11 +106,16 @@ def decide_aoi(state: GraphState):
         ("human", "OCR Token Data with Full Coordinates:\n{ocr_data}")
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
-    parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(tools=[AreasOfInterest]) | parser
+    structured_llm = llm.with_structured_output(AreasOfInterest)
+    chain = prompt | structured_llm
     try:
         areas = chain.invoke({"ocr_data": ocr_text_with_coords})
-    except OutputParserException:
+        # with_structured_output returns the Pydantic object directly
+        if areas:
+            areas = areas.model_dump()
+        else:
+            areas = {}
+    except Exception:
         logger.exception("Could not parse LLM output for AOI. Returning empty.")
         areas = {}
     return {"areas_of_interest": areas}
@@ -142,11 +145,13 @@ def extract_header_data(state: GraphState):
         ("human", "Header Area OCR Tokens:\n{ocr_data_with_coords}")
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
-    parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(tools=[ExtractedHeader]) | parser
+    structured_llm = llm.with_structured_output(ExtractedHeader)
+    chain = prompt | structured_llm
     try:
         header_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
-    except OutputParserException:
+        if header_data:
+            header_data = header_data.model_dump()
+    except Exception:
         logger.exception("Could not parse LLM output for header extraction. Returning None.")
         header_data = None
     return {"extracted_header": header_data}
@@ -175,11 +180,13 @@ def extract_line_items_data(state: GraphState):
         ("human", "Line Items Area OCR Tokens:\n{ocr_data_with_coords}")
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
-    parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(tools=[ExtractedLineItems]) | parser
+    structured_llm = llm.with_structured_output(ExtractedLineItems)
+    chain = prompt | structured_llm
     try:
         line_items_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
-    except OutputParserException:
+        if line_items_data:
+            line_items_data = line_items_data.model_dump()
+    except Exception:
         logger.exception("Could not parse LLM output for line items extraction. Returning None.")
         line_items_data = None
     return {"extracted_line_items": line_items_data}
@@ -206,11 +213,13 @@ def extract_summary_data(state: GraphState):
         ("human", "Summary Area OCR Tokens:\n{ocr_data_with_coords}")
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
-    parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(tools=[ExtractedSummary]) | parser
+    structured_llm = llm.with_structured_output(ExtractedSummary)
+    chain = prompt | structured_llm
     try:
         summary_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
-    except OutputParserException:
+        if summary_data:
+            summary_data = summary_data.model_dump()
+    except Exception:
         logger.exception("Could not parse LLM output for summary extraction. Returning None.")
         summary_data = None
     return {"extracted_summary": summary_data}
