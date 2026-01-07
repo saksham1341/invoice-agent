@@ -269,9 +269,11 @@ function App() {
     const [images, setImages] = useState([]);
     const [extractedData, setExtractedData] = useState(null);
     const [agentStatus, setAgentStatus] = useState('');
+    const [progress, setProgress] = useState(0);
     const [areasOfInterest, setAreasOfInterest] = useState(null);
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState('');
+    const abortControllerRef = useRef(null);
 
     useEffect(() => {
         const fetchSchema = async () => {
@@ -285,13 +287,37 @@ function App() {
         fetchSchema();
     }, []);
 
+    const resetState = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+        }
+        setExtractedData(null);
+        setImages([]);
+        setAgentStatus('');
+        setProgress(0);
+        setAreasOfInterest(null);
+        setLoading(false);
+        setError('');
+    }, []);
+
+    const handleCancel = useCallback(() => {
+        if (abortControllerRef.current) {
+            abortControllerRef.current.abort();
+            setAgentStatus('Cancelled');
+            setLoading(false);
+        }
+    }, []);
+
     const processFiles = useCallback(async (files) => {
         setLoading(true);
         setError('');
         setExtractedData({});
         setImages([]);
         setAgentStatus('Preparing image...');
+        setProgress(5);
         setAreasOfInterest(null);
+        
+        abortControllerRef.current = new AbortController();
 
         const imagePromises = Array.from(files).map(file => {
             return new Promise((resolve, reject) => {
@@ -361,6 +387,7 @@ function App() {
                     const response = await fetch(`${API_BASE_URL}/api/extract-invoice`, {
                         method: 'POST',
                         body: formData,
+                        signal: abortControllerRef.current.signal
                     });
 
                     const reader = response.body.getReader();
@@ -387,24 +414,30 @@ function App() {
                                 const nodeData = data[nodeName];
 
                                 if (nodeName === 'extract_structured_ocr') {
-                                    setAgentStatus('OCR extraction complete.');
+                                    setAgentStatus('Reading text...');
+                                    setProgress(20);
                                 } else if (nodeName === 'decide_aoi') {
-                                    setAgentStatus('Key areas located.');
+                                    setAgentStatus('Identifying layout...');
+                                    setProgress(40);
                                     setAreasOfInterest(nodeData.areas_of_interest);
                                 } else if (nodeName === 'extract_header_data') {
-                                    setAgentStatus('Header information extracted.');
+                                    setAgentStatus('Extracting header details...');
+                                    setProgress(60);
                                     setExtractedData(prev => ({ ...prev, ...nodeData.extracted_header }));
                                 } else if (nodeName === 'extract_line_items_data') {
-                                    setAgentStatus('Line items extracted.');
+                                    setAgentStatus('Parsing line items...');
+                                    setProgress(80);
                                     setExtractedData(prev => ({
                                         ...prev,
                                         line_items: nodeData.extracted_line_items?.line_items || []
                                     }));
                                 } else if (nodeName === 'extract_summary_data') {
-                                    setAgentStatus('Summary data extracted.');
+                                    setAgentStatus('Calculating totals...');
+                                    setProgress(90);
                                     setExtractedData(prev => ({ ...prev, ...nodeData.extracted_summary }));
                                 } else if (nodeName === 'aggregate_results') {
-                                    setAgentStatus('Finalizing...');
+                                    setAgentStatus('Completed');
+                                    setProgress(100);
                                     setExtractedData(nodeData.extracted_data);
                                     setLoading(false);
                                 }
@@ -412,8 +445,12 @@ function App() {
                         }
                     }
                 } catch (err) {
-                    setError('Failed to extract data: ' + err.message);
-                    setLoading(false);
+                    if (err.name === 'AbortError') {
+                        console.log('Fetch aborted');
+                    } else {
+                        setError('Failed to extract data: ' + err.message);
+                        setLoading(false);
+                    }
                 }
             }, 'image/jpeg');
         } else {
@@ -441,10 +478,24 @@ function App() {
                 <>
                     <div className="status-bar">
                         <div className="status-content">
-                            <span className={`status-dot ${loading ? 'pulse' : ''}`}></span>
-                            <span className="status-text">{agentStatus}</span>
+                            <div className="status-info">
+                                <span className={`status-dot ${loading ? 'pulse' : 'completed'}`}></span>
+                                <span className="status-text">{agentStatus}</span>
+                            </div>
+                            <div className="progress-container">
+                                <div 
+                                    className={`progress-fill ${!loading ? 'completed' : ''}`} 
+                                    style={{ width: `${progress}%` }}
+                                ></div>
+                            </div>
                         </div>
-                        {loading && <div className="progress-line"></div>}
+                        <div className="status-actions">
+                            {loading ? (
+                                <button className="btn btn-cancel" onClick={handleCancel}>Cancel</button>
+                            ) : (
+                                <button className="btn btn-primary" onClick={resetState}>Parse Another</button>
+                            )}
+                        </div>
                     </div>
                     <InvoiceView 
                         images={images} 
