@@ -1,15 +1,15 @@
 import os
 import json
+import base64
 from typing import TypedDict, Optional, List, Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_core.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langgraph.graph import StateGraph, END
-import pandas as pd
 from io import BytesIO
 from PIL import Image
-import pytesseract
 from langchain_core.exceptions import OutputParserException
+from langchain_core.messages import HumanMessage
 from . import config
 from .schema import (
     BoundingBox, WithValue, AreasOfInterest, ExtractedHeader, 
@@ -47,14 +47,69 @@ class GraphState(TypedDict):
 # --- Graph Nodes ---
 
 def extract_structured_ocr(state: GraphState):
-    """Extracts structured OCR data from the image file content."""
-    print("--- EXTRACTING STRUCTURED OCR DATA ---")
+    """Extracts structured OCR data from the image using Gemini's native vision capabilities."""
+    print("--- EXTRACTING STRUCTURED OCR DATA (NATIVE VISION) ---")
+    
+    # Get image dimensions to normalize coordinates if needed, 
+    # though we'll ask Gemini for pixel coordinates relative to the input image.
     image_file = BytesIO(state['image_content'])
     image = Image.open(image_file)
-    ocr_df = pytesseract.image_to_data(image, output_type=pytesseract.Output.DATAFRAME)
-    ocr_df.dropna(inplace=True)
-    ocr_df = ocr_df[ocr_df.conf != -1]
-    ocr_data = ocr_df.to_dict('records')
+    width, height = image.size
+
+    # Prepare the image for Gemini
+    image_base64 = base64.b64encode(state['image_content']).decode('utf-8')
+    
+    llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
+    
+    # Define the schema for Gemini to return OCR tokens
+    ocr_function = {
+        "name": "output_ocr_tokens",
+        "description": "Output the text tokens found in the image with their coordinates.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "tokens": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "left": {"type": "integer"},
+                            "top": {"type": "integer"},
+                            "width": {"type": "integer"},
+                            "height": {"type": "integer"}
+                        },
+                        "required": ["text", "left", "top", "width", "height"]
+                    }
+                }
+            },
+            "required": ["tokens"]
+        }
+    }
+
+    message = HumanMessage(
+        content=[
+            {
+                "type": "text",
+                "text": f"Extract all text tokens from this invoice image. For each token, provide the text and its bounding box in pixels (left, top, width, height). The image size is {width}x{height} pixels. Output as a list of tokens."
+            },
+            {
+                "type": "image_url",
+                "image_url": f"data:image/jpeg;base64,{image_base64}"
+            }
+        ]
+    )
+    
+    parser = JsonOutputFunctionsParser()
+    chain = llm.bind(functions=[ocr_function], function_call={"name": "output_ocr_tokens"}) | parser
+    
+    try:
+        result = chain.invoke([message])
+        ocr_data = result.get("tokens", [])
+    except Exception as e:
+        print(f"Error during native OCR: {e}")
+        ocr_data = []
+
     return {"ocr_data": ocr_data}
 
 def decide_aoi(state: GraphState):

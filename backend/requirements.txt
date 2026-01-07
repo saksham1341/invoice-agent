@@ -4,8 +4,6 @@ python-multipart
 pydantic
 langgraph
 langchain-google-genai
-pandas
 requests
-pytesseract
 Pillow
 python-dotenv
