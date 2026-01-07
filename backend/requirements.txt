@@ -7,3 +7,6 @@ langchain-google-genai
 requests
 Pillow
 python-dotenv
+rapidocr_onnxruntime
+opencv-python-headless
+numpy
