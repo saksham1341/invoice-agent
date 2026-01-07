@@ -15,7 +15,7 @@ An AI-powered agent that extracts structured data from invoices using LangGraph 
 2. Create a virtual environment: `python -m venv venv`.
 3. Activate it: `source venv/bin/activate`.
 4. Install dependencies: `pip install -r requirements.txt`.
-5. Set your `GOOGLE_API_KEY` in `backend/.env`.
+5. Set your `GOOGLE_API_KEY` and `GEMINI_MODEL_NAME` (e.g., `gemini-2.5-flash` or `gemini-1.5-pro`) in `backend/.env`.
 
 ### Frontend
 1. Navigate to `frontend/`.
