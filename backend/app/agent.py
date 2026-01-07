@@ -1,14 +1,14 @@
 import os
 import json
 import logging
+import base64
 from typing import TypedDict, Optional, List, Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langgraph.graph import StateGraph, END
 from io import BytesIO
 from PIL import Image
-import numpy as np
-from rapidocr_onnxruntime import RapidOCR
+from langchain_core.messages import HumanMessage
 from . import config
 from .schema import (
     BoundingBox, WithValue, AreasOfInterest, ExtractedHeader, 
@@ -18,9 +18,6 @@ from .schema import (
 # --- Configuration ---
 logger = logging.getLogger(__name__)
 GEMINI_MODEL_NAME = config.GEMINI_MODEL_NAME
-
-# Initialize RapidOCR engine
-engine = RapidOCR()
 
 def filter_ocr_data_by_bbox(ocr_data, bbox_dict):
     """Filters OCR data to include only items within a given bounding box."""
@@ -50,39 +47,67 @@ class GraphState(TypedDict):
 # --- Graph Nodes ---
 
 def extract_structured_ocr(state: GraphState):
-    """Extracts structured OCR data from the image using RapidOCR (local, no system dependencies)."""
-    logger.info("--- EXTRACTING STRUCTURED OCR DATA (RAPIDOCR) ---")
+    """Extracts structured OCR data from the image using Gemini's native vision capabilities."""
+    logger.info("--- EXTRACTING STRUCTURED OCR DATA (GEMINI VISION) ---")
     
     try:
+        # Get image dimensions
         image_file = BytesIO(state['image_content'])
-        image = Image.open(image_file).convert('RGB')
-        img_array = np.array(image)
+        image = Image.open(image_file)
+        width, height = image.size
 
-        # Run RapidOCR
-        # result is a list of [ [bbox], text, confidence ]
-        result, _ = engine(img_array)
+        # Prepare image for Gemini
+        image_base64 = base64.b64encode(state['image_content']).decode('utf-8')
 
-        ocr_data = []
-        if result:
-            for bbox, text, conf in result:
-                # bbox is typically [[x1, y1], [x2, y1], [x2, y2], [x1, y2]]
-                x1 = int(min(pt[0] for pt in bbox))
-                y1 = int(min(pt[1] for pt in bbox))
-                x2 = int(max(pt[0] for pt in bbox))
-                y2 = int(max(pt[1] for pt in bbox))
-                
-                ocr_data.append({
-                    "text": text,
-                    "left": x1,
-                    "top": y1,
-                    "width": x2 - x1,
-                    "height": y2 - y1
-                })
+        # Define schema for the OCR output
+        class OCROutput(TypedDict):
+            tokens: List[Dict[str, Any]]
 
-        logger.debug(f"OCR Data: {ocr_data}")
+        ocr_schema = {
+            "title": "OCROutput",
+            "type": "object",
+            "properties": {
+                "tokens": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "text": {"type": "string"},
+                            "left": {"type": "integer"},
+                            "top": {"type": "integer"},
+                            "width": {"type": "integer"},
+                            "height": {"type": "integer"}
+                        },
+                        "required": ["text", "left", "top", "width", "height"]
+                    }
+                }
+            },
+            "required": ["tokens"]
+        }
+
+        llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
+        structured_llm = llm.with_structured_output(ocr_schema)
+
+        message = HumanMessage(
+            content=[
+                {
+                    "type": "text",
+                    "text": f"Extract all text tokens from this invoice image. For each token, provide the text and its bounding box in pixels (left, top, width, height). The image size is {width}x{height} pixels."
+                },
+                {
+                    "type": "image_url",
+                    "image_url": f"data:image/jpeg;base64,{image_base64}"
+                }
+            ]
+        )
+
+        result = structured_llm.invoke([message])
+        ocr_data = result.get("tokens", []) if result else []
+
+        logger.debug(f"OCR Tokens count: {len(ocr_data)}")
         return {"ocr_data": ocr_data}
     except Exception:
-        logger.exception("Error during RapidOCR extraction")
+        logger.exception("Error during Gemini Vision OCR extraction")
         return {"ocr_data": []}
 
 def decide_aoi(state: GraphState):
