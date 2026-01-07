@@ -1,9 +1,11 @@
 #!/bin/bash
 
 # This script runs the backend server for the invoice extraction agent.
+# It is configured to work both locally and on hosting services like Render.
 
-# Activate the virtual environment
-source backend/venv/bin/activate
+# Use the PORT environment variable provided by Render, defaulting to 8000
+PORT="${PORT:-8000}"
 
 # Run the uvicorn server
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload --app-dir backend
+# --app-dir backend ensures uvicorn looks in the backend directory for the app
+exec uvicorn app.main:app --host 0.0.0.0 --port "$PORT" --app-dir backend

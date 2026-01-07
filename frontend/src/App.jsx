@@ -6,7 +6,7 @@ import './style.css';
 
 pdfjsLib.GlobalWorkerOptions.workerSrc = `/pdf.worker.min.mjs`;
 
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
 
 const FileUpload = ({ onUpload, loading }) => (
     <div className="upload-container">
