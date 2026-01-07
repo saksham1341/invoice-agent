@@ -9,6 +9,7 @@ import pandas as pd
 from io import BytesIO
 from PIL import Image
 import pytesseract
+from langchain_core.exceptions import OutputParserException
 from . import config
 from .schema import (
     BoundingBox, WithValue, AreasOfInterest, ExtractedHeader, 
