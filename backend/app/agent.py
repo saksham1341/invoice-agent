@@ -101,7 +101,15 @@ def extract_structured_ocr(state: GraphState):
     )
     
     parser = JsonOutputFunctionsParser()
-    chain = llm.bind(functions=[ocr_function], function_call={"name": "output_ocr_tokens"}) | parser
+    chain = llm.bind(
+        tools=[ocr_function], 
+        tool_config={
+            "function_calling_config": {
+                "mode": "ANY",
+                "allowed_function_names": ["output_ocr_tokens"]
+            }
+        }
+    ) | parser
     
     try:
         result = chain.invoke([message])
@@ -134,7 +142,7 @@ def decide_aoi(state: GraphState):
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
     parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(functions=[AreasOfInterest]) | parser
+    chain = prompt | llm.bind(tools=[AreasOfInterest]) | parser
     try:
         areas = chain.invoke({"ocr_data": ocr_text_with_coords})
     except OutputParserException:
@@ -168,7 +176,7 @@ def extract_header_data(state: GraphState):
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
     parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(functions=[ExtractedHeader]) | parser
+    chain = prompt | llm.bind(tools=[ExtractedHeader]) | parser
     try:
         header_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
@@ -201,7 +209,7 @@ def extract_line_items_data(state: GraphState):
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
     parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(functions=[ExtractedLineItems]) | parser
+    chain = prompt | llm.bind(tools=[ExtractedLineItems]) | parser
     try:
         line_items_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
@@ -232,7 +240,7 @@ def extract_summary_data(state: GraphState):
     ])
     llm = ChatGoogleGenerativeAI(model=GEMINI_MODEL_NAME, temperature=0)
     parser = JsonOutputFunctionsParser()
-    chain = prompt | llm.bind(functions=[ExtractedSummary]) | parser
+    chain = prompt | llm.bind(tools=[ExtractedSummary]) | parser
     try:
         summary_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
