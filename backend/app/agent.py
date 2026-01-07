@@ -1,5 +1,6 @@
 import os
 import json
+import logging
 from typing import TypedDict, Optional, List, Dict, Any
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_google_genai import ChatGoogleGenerativeAI
@@ -17,6 +18,7 @@ from .schema import (
 )
 
 # --- Configuration ---
+logger = logging.getLogger(__name__)
 GEMINI_MODEL_NAME = config.GEMINI_MODEL_NAME
 
 # Initialize RapidOCR engine
@@ -51,7 +53,7 @@ class GraphState(TypedDict):
 
 def extract_structured_ocr(state: GraphState):
     """Extracts structured OCR data from the image using RapidOCR (local, no system dependencies)."""
-    print("--- EXTRACTING STRUCTURED OCR DATA (RAPIDOCR) ---")
+    logger.info("--- EXTRACTING STRUCTURED OCR DATA (RAPIDOCR) ---")
     
     image_file = BytesIO(state['image_content'])
     image = Image.open(image_file).convert('RGB')
@@ -78,11 +80,12 @@ def extract_structured_ocr(state: GraphState):
                 "height": y2 - y1
             })
 
+    logger.debug(f"OCR Data: {ocr_data}")
     return {"ocr_data": ocr_data}
 
 def decide_aoi(state: GraphState):
     """Identifies the coordinates of key areas of interest."""
-    print("--- DECIDING AREAS OF INTEREST ---")
+    logger.info("--- DECIDING AREAS OF INTEREST ---")
     ocr_text_with_coords = "\n".join([
         f"text: '{item['text']}', x1: {item['left']}, y1: {item['top']}, x2: {item['left'] + item['width']}, y2: {item['top'] + item['height']}" 
         for item in state['ocr_data']
@@ -106,13 +109,13 @@ def decide_aoi(state: GraphState):
     try:
         areas = chain.invoke({"ocr_data": ocr_text_with_coords})
     except OutputParserException:
-        print("Warning: Could not parse LLM output for AOI. Returning empty.")
+        logger.warning("Could not parse LLM output for AOI. Returning empty.")
         areas = {}
     return {"areas_of_interest": areas}
 
 def extract_header_data(state: GraphState):
     """Extracts data from the header area."""
-    print("--- EXTRACTING HEADER DATA ---")
+    logger.info("--- EXTRACTING HEADER DATA ---")
     header_area = state["areas_of_interest"].get("header_area")
     if not header_area:
         return {"extracted_header": None}
@@ -140,13 +143,13 @@ def extract_header_data(state: GraphState):
     try:
         header_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
-        print("Warning: Could not parse LLM output for header extraction. Returning None.")
+        logger.warning("Could not parse LLM output for header extraction. Returning None.")
         header_data = None
     return {"extracted_header": header_data}
 
 def extract_line_items_data(state: GraphState):
     """Extracts data from the line items area."""
-    print("--- EXTRACTING LINE ITEMS DATA ---")
+    logger.info("--- EXTRACTING LINE ITEMS DATA ---")
     line_items_area = state["areas_of_interest"].get("line_items_area")
     if not line_items_area:
         return {"extracted_line_items": None}
@@ -173,13 +176,13 @@ def extract_line_items_data(state: GraphState):
     try:
         line_items_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
-        print("Warning: Could not parse LLM output for line items extraction. Returning None.")
+        logger.warning("Could not parse LLM output for line items extraction. Returning None.")
         line_items_data = None
     return {"extracted_line_items": line_items_data}
 
 def extract_summary_data(state: GraphState):
     """Extracts data from the summary area."""
-    print("--- EXTRACTING SUMMARY DATA ---")
+    logger.info("--- EXTRACTING SUMMARY DATA ---")
     summary_area = state["areas_of_interest"].get("summary_area")
     if not summary_area:
         return {"extracted_summary": None}
@@ -204,13 +207,13 @@ def extract_summary_data(state: GraphState):
     try:
         summary_data = chain.invoke({"ocr_data_with_coords": ocr_text_with_coords})
     except OutputParserException:
-        print("Warning: Could not parse LLM output for summary extraction. Returning None.")
+        logger.warning("Could not parse LLM output for summary extraction. Returning None.")
         summary_data = None
     return {"extracted_summary": summary_data}
 
 def aggregate_results(state: GraphState):
     """Aggregates results from all extractors into the final JSON."""
-    print("--- AGGREGATING RESULTS ---")
+    logger.info("--- AGGREGATING RESULTS ---")
     
     final_data = {}
 

@@ -1,6 +1,7 @@
 import json
 import os
 import asyncio
+import logging
 from fastapi import FastAPI, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
@@ -8,6 +9,13 @@ from fastapi.responses import StreamingResponse
 from . import config
 from .schema import CompleteInvoice
 from .agent import run_agent, run_agent_stream
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Create the FastAPI app
 app = FastAPI()
