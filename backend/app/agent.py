@@ -9,25 +9,14 @@ import pandas as pd
 from io import BytesIO
 from PIL import Image
 import pytesseract
-from langchain_core.exceptions import OutputParserException
-from dotenv import load_dotenv
-
-# Load environment variables from .env file
-load_dotenv()
-
-# --- Configuration ---
-if "GOOGLE_API_KEY" not in os.environ:
-    raise ValueError("Please set the GOOGLE_API_KEY environment variable.")
-
-# Get model name from environment variable, default to gemini-2.5-flash for speed
-GEMINI_MODEL_NAME = os.environ.get("GEMINI_MODEL_NAME", "gemini-2.5-flash")
-
+from . import config
 from .schema import (
     BoundingBox, WithValue, AreasOfInterest, ExtractedHeader, 
     LineItem, ExtractedLineItems, ExtractedSummary
 )
 
 # --- Configuration ---
+GEMINI_MODEL_NAME = config.GEMINI_MODEL_NAME
 
 def filter_ocr_data_by_bbox(ocr_data, bbox_dict):
     """Filters OCR data to include only items within a given bounding box."""
