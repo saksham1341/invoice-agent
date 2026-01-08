@@ -392,17 +392,24 @@ function App() {
 
                     const reader = response.body.getReader();
                     const decoder = new TextDecoder();
+                    let buffer = '';
                     
                     while (true) {
                         const { value, done } = await reader.read();
                         if (done) break;
                         
-                        const chunk = decoder.decode(value);
-                        const lines = chunk.split('\n');
+                        buffer += decoder.decode(value, { stream: true });
+                        const lines = buffer.split('\n');
+                        
+                        // Keep the last partial line in the buffer
+                        buffer = lines.pop();
                         
                         for (const line of lines) {
-                            if (line.startsWith('data: ')) {
-                                const data = JSON.parse(line.substring(6));
+                            const trimmedLine = line.trim();
+                            if (!trimmedLine || !trimmedLine.startsWith('data: ')) continue;
+                            
+                            try {
+                                const data = JSON.parse(trimmedLine.substring(6));
                                 
                                 if (data.error) {
                                     setError(data.error);
@@ -441,6 +448,8 @@ function App() {
                                     setExtractedData(nodeData.extracted_data);
                                     setLoading(false);
                                 }
+                            } catch (parseErr) {
+                                console.error('Error parsing SSE line:', parseErr, trimmedLine);
                             }
                         }
                     }
