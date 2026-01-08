@@ -2,6 +2,8 @@
 
 An AI-powered agent that extracts structured data from invoices using LangGraph and Gemini.
 
+**Live Demo:** [https://sxm-invoice-agent.vercel.app/](https://sxm-invoice-agent.vercel.app/)
+
 ## Features
 - **Real-time Streaming**: Watch the agent process the invoice in real-time.
 - **Visual Feedback**: Bounding boxes highlight extracted data on the document.
